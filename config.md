@@ -375,7 +375,7 @@ For Windows based systems the user structure has the following fields:
 For POSIX platforms, the configuration structure supports `hooks` for configuring custom actions related to the [lifecycle](runtime.md#lifecycle) of the container.
 
 * **`hooks`** (object, OPTIONAL) MAY contain any of the following properties:
-    * **`prestart`** (array of objects, OPTIONAL) is an array of [pre-start hooks](#prestart).
+    * **`prestart`** (array of objects, OPTIONAL, **DEPRECATED**) is an array of [pre-start hooks](#prestart).
         Entries in the array contain the following properties:
         * **`path`** (string, REQUIRED) with similar semantics to [IEEE Std 1003.1-2008 `execv`'s *path*][ieee-1003.1-2008-functions-exec].
             This specification extends the IEEE standard in that **`path`** MUST be absolute.
@@ -384,6 +384,10 @@ For POSIX platforms, the configuration structure supports `hooks` for configurin
         * **`env`** (array of strings, OPTIONAL) with the same semantics as [IEEE Std 1003.1-2008's `environ`][ieee-1003.1-2008-xbd-c8.1].
         * **`timeout`** (int, OPTIONAL) is the number of seconds before aborting the hook.
             If set, `timeout` MUST be greater than zero.
+    * **`mount`** (array of objects, OPTIONAL) is an array of [mount hooks](#mount-hooks).
+        Entries in the array have the same schema as pre-start entries.
+    * **`start`** (array of objects, OPTIONAL) is an array of [start hooks](#start-hooks).
+        Entries in the array have the same schema as pre-start entries.
     * **`poststart`** (array of objects, OPTIONAL) is an array of [post-start hooks](#poststart).
         Entries in the array have the same schema as pre-start entries.
     * **`poststop`** (array of objects, OPTIONAL) is an array of [post-stop hooks](#poststop).
@@ -398,6 +402,21 @@ The [state](runtime.md#state) of the container MUST be passed to hooks over stdi
 
 The pre-start hooks MUST be called after the [`start`](runtime.md#start) operation is called but [before the user-specified program command is executed](runtime.md#lifecycle).
 On Linux, for example, they are called after the container namespaces are created, so they provide an opportunity to customize the container (e.g. the network namespace could be specified in this hook).
+
+Note: Prestart hooks were deprecated in favor of mount and start hooks, which have a clearer definition.
+Additionally note that `runc` incorrectly implemented the prestart hooks, users should be warry of relying on a particular behavior.
+
+### <a name="configHooksMount" />Mount Hooks
+
+The mount hooks MUST be called as part of the create operation at a time that would allow the hook to execute operations both inside and outside the container.
+For example, on Linux this would happen before the `pivot_root` operation is executed but after the mount namespace was created and setup.
+
+For runtimes that implement the deprecated pre-start hooks as mount hooks, mount hooks MUST be called after the prestart hooks.
+
+### <a name="configHooksStart" />Start Hooks
+
+The start hooks MUST be called [before the user-specified process is executed](runtime.md#lifecycle) as part of the [`start`](runtime.md#start) operation.
+This hook can be used to execute some operations in the container, for example running the ldconfig binary on linux before the container process is spawned.
 
 ### <a name="configHooksPoststart" />Poststart
 
@@ -422,6 +441,18 @@ Cleanup or debugging functions are examples of such a hook.
             {
                 "path": "/usr/bin/setup-network"
             }
+        ],
+        "mount": [
+            {
+                "path": "/usr/bin/mount-hook",
+                "args": ["-mount", "arg1", "arg2"],
+                "env":  [ "key1=value1"]
+            },
+        ],
+        "start": [
+            {
+                "path": "/usr/bin/refresh-ldcache",
+            },
         ],
         "poststart": [
             {
